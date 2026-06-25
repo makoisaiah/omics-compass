@@ -1,0 +1,19 @@
+# Python 仮想環境
+venv/
+
+# Python キャッシュ
+__pycache__/
+*.pyc
+*.pyo
+
+# 環境変数ファイル（APIキーなどを書く場合）
+.env
+
+# データファイル（大きいファイルは GitHub に上げない）
+data/
+*.csv
+*.h5
+*.gz
+
+# OS 系
+.DS_Store
