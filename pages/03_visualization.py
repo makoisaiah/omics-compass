@@ -12,6 +12,8 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import gseapy as gp
+import networkx as nx
+import requests
 
 st.title("📊 Visualization")
 st.subheader("パスウェイ解析と可視化")
@@ -170,6 +172,141 @@ with tab3:
                     )
                     st.plotly_chart(fig3, use_container_width=True)
                     st.dataframe(df_enr_sig[["Term", "Adjusted P-value", "Genes"]].head(20))
+
+            except Exception as e:
+                st.error(f"エラーが発生しました: {e}")
+                st.exception(e)
+
+# --- タブ4: ネットワーク解析 ---
+with tab4:
+    st.markdown("### 遺伝子ネットワーク解析")
+    st.markdown("""
+    STRING DB を使って、有意に変化した遺伝子間の相互作用ネットワークを表示します。
+    - **線が太い**: 相互作用の信頼度が高い
+    - **赤いノード**: 発現上昇
+    - **青いノード**: 発現低下
+    """)
+
+    # STRING DB API について:
+    # https://string-db.org/help/api/
+
+    # 上位遺伝子を取得
+    n_genes = st.slider("解析する遺伝子数", min_value=10, max_value=50, value=20)
+    
+    top_genes = df_sig.head(n_genes)
+    gene_symbols = top_genes["Gene"].tolist()
+    
+    # プローブIDが混入している場合は除外
+    gene_symbols = [g for g in gene_symbols if not g.endswith("_at")]
+
+    if st.button("ネットワーク解析を実行", type="primary"):
+        with st.spinner("STRING DB に問い合わせ中..."):
+            try:
+                # STRING DB API でネットワークデータを取得
+                string_api_url = "https://string-db.org/api/json/network"
+                params = {
+                    "identifiers": "%0d".join(gene_symbols),
+                    "species": 10090,  # マウスの taxonomy ID
+                    "caller_identity": "omics_compass"
+                }
+                response = requests.post(string_api_url, data=params)
+                data = response.json()
+
+                if not data:
+                    st.warning("ネットワークデータが見つかりませんでした。遺伝子シンボルの変換を確認してください。")
+                    st.stop()
+
+                # NetworkX でグラフを構築
+                G = nx.Graph()
+
+                # ノードを追加（発現変化の情報付き）
+                gene_fc = df_sig.set_index("Gene")["Log2FoldChange"].to_dict()
+                for gene in gene_symbols:
+                    G.add_node(gene, log2fc=gene_fc.get(gene, 0))
+
+                # エッジを追加
+                for interaction in data:
+                    gene_a = interaction["preferredName_A"]
+                    gene_b = interaction["preferredName_B"]
+                    score = interaction["score"]
+                    if score > 0.4:  # 信頼度 0.4 以上のみ
+                        G.add_edge(gene_a, gene_b, weight=score)
+
+                st.success(f"ネットワーク構築完了: {G.number_of_nodes()} 遺伝子, {G.number_of_edges()} 相互作用")
+
+                # Plotly でネットワークを可視化
+                # spring layout でノードの位置を決定
+                pos = nx.spring_layout(G, seed=42)
+
+                # エッジの描画
+                edge_traces = []
+                for edge in G.edges(data=True):
+                    x0, y0 = pos[edge[0]]
+                    x1, y1 = pos[edge[1]]
+                    weight = edge[2].get("weight", 0.5)
+                    edge_traces.append(
+                        go.Scatter(
+                            x=[x0, x1, None],
+                            y=[y0, y1, None],
+                            mode="lines",
+                            line=dict(width=weight * 3, color="#888"),
+                            hoverinfo="none",
+                            showlegend=False
+                        )
+                    )
+
+                # ノードの描画
+                node_x, node_y, node_text, node_color, node_size = [], [], [], [], []
+                for node in G.nodes():
+                    x, y = pos[node]
+                    node_x.append(x)
+                    node_y.append(y)
+                    fc = G.nodes[node].get("log2fc", 0)
+                    node_text.append(f"{node}<br>Log2FC: {fc:.2f}")
+                    node_color.append(fc)
+                    # 次数（接続数）でサイズを変える
+                    node_size.append(10 + G.degree(node) * 5)
+
+                node_trace = go.Scatter(
+                    x=node_x,
+                    y=node_y,
+                    mode="markers+text",
+                    text=list(G.nodes()),
+                    textposition="top center",
+                    hovertext=node_text,
+                    hoverinfo="text",
+                    marker=dict(
+                        size=node_size,
+                        color=node_color,
+                        colorscale="RdBu_r",
+                        colorbar=dict(title="Log2FC"),
+                        line=dict(width=1, color="white")
+                    )
+                )
+
+                fig4 = go.Figure(
+                    data=edge_traces + [node_trace],
+                    layout=go.Layout(
+                        title="遺伝子相互作用ネットワーク（STRING DB）",
+                        showlegend=False,
+                        hovermode="closest",
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        height=600
+                    )
+                )
+
+                st.plotly_chart(fig4, use_container_width=True)
+
+                # ハブ遺伝子（接続数が多い遺伝子）を表示
+                st.markdown("### ハブ遺伝子（相互作用が多い遺伝子）")
+                degree_df = pd.DataFrame(
+                    [(node, G.degree(node), gene_fc.get(node, 0))
+                     for node in G.nodes()],
+                    columns=["Gene", "接続数", "Log2FoldChange"]
+                ).sort_values("接続数", ascending=False)
+
+                st.dataframe(degree_df.head(10), use_container_width=True)
 
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")

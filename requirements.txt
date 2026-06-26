@@ -9,3 +9,5 @@ statsmodels
 plotly
 gseapy
 mygene
+networkx
+requests
