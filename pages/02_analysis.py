@@ -100,7 +100,9 @@ if st.button("差分解析を実行", type="primary"):
             # Fold Change を計算（log2スケール）
             mean_control = np.mean(control_data, axis=1)
             mean_treatment = np.mean(treatment_data, axis=1)
-            log2fc = mean_treatment - mean_control  # すでにlog2スケールの場合
+            mean_control_safe = np.where(mean_control > 0, mean_control, 1e-10)
+            mean_treatment_safe = np.where(mean_treatment > 0, mean_treatment, 1e-10)
+            log2fc = np.log2(mean_treatment_safe) - np.log2(mean_control_safe)
 
             # 多重検定補正（Benjamini-Hochberg法）
             _, p_adj, _, _ = multipletests(p_values, method="fdr_bh")
