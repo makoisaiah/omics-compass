@@ -167,4 +167,8 @@ with tab3:
                         color_continuous_scale="Reds"
                     )
                     st.plotly_chart(fig3, use_container_width=True)
-                    st.dataframe(df_enr_sig[["Term", "Adjusted P-value", "Genes"]].
+                    st.dataframe(df_enr_sig[["Term", "Adjusted P-value", "Genes"]].head(20))
+
+            except Exception as e:
+                st.error(f"エラーが発生しました: {e}")
+                st.exception(e)
