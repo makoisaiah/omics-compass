@@ -3,6 +3,7 @@
 # https://docs.streamlit.io/develop/concepts/multipage-apps/overview
 
 import streamlit as st
+from components.auth import login
 
 st.set_page_config(
     page_title="OmicsCompass",
@@ -10,6 +11,11 @@ st.set_page_config(
     layout="wide"
 )
 
+# ログイン確認
+if not login():
+    st.stop()
+
+# ログイン後のメインページ
 st.title("🧭 OmicsCompass")
 st.subheader("オミクスデータから経路を探索するツール")
 
@@ -23,5 +29,3 @@ st.markdown("""
 | 🔬 Analysis | 差分発現解析 |
 | 📊 Visualization | パスウェイ解析と可視化 |
 """)
-
-st.info("現在開発中です")
