@@ -1,0 +1,141 @@
+# OmicsCompass - 差分解析ページ
+# マイクロアレイデータの差分解析について:
+# https://geoparse.readthedocs.io/en/latest/
+# scipy を使った t 検定:
+# https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html
+# 多重検定補正 (Benjamini-Hochberg):
+# https://www.statsmodels.org/stable/generated/statsmodels.stats.multitest.multipletests.html
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+from scipy import stats
+from statsmodels.stats.multitest import multipletests
+
+st.title("🔬 Analysis")
+st.subheader("差分発現解析")
+
+# セッションにデータがあるか確認
+if "gse" not in st.session_state:
+    st.warning("まず Data Fetch ページでデータを取得してください")
+    st.stop()
+
+gse = st.session_state["gse"]
+geo_id = st.session_state.get("geo_id", "")
+
+st.markdown(f"**データセット**: {geo_id}")
+
+# サンプル一覧を表示してグループ分けを設定
+st.markdown("### グループ分け")
+st.markdown("各サンプルをコントロール群・処理群に割り当ててください")
+
+sample_names = list(gse.gsms.keys())
+sample_titles = {
+    name: gse.gsms[name].metadata.get("title", ["不明"])[0]
+    for name in sample_names
+}
+
+# グループ割り当て UI
+group_assignments = {}
+cols = st.columns(2)
+with cols[0]:
+    st.markdown("**コントロール群**")
+with cols[1]:
+    st.markdown("**処理群**")
+
+for name in sample_names:
+    title = sample_titles[name]
+    col1, col2 = st.columns(2)
+    with col1:
+        st.text(f"{name}: {title[:40]}")
+    with col2:
+        group = st.selectbox(
+            label=name,
+            options=["コントロール", "処理群"],
+            key=f"group_{name}",
+            label_visibility="collapsed"
+        )
+        group_assignments[name] = group
+
+# 解析実行ボタン
+if st.button("差分解析を実行", type="primary"):
+    control_samples = [n for n, g in group_assignments.items() if g == "コントロール"]
+    treatment_samples = [n for n, g in group_assignments.items() if g == "処理群"]
+
+    if len(control_samples) < 2 or len(treatment_samples) < 2:
+        st.error("各群に最低2サンプル必要です")
+        st.stop()
+
+    with st.spinner("解析中..."):
+        try:
+            # 発現データを取得
+            # GEOparse でマイクロアレイの発現値を取得する方法:
+            # https://geoparse.readthedocs.io/en/latest/GEOparse.html
+            expr_data = {}
+            for name in sample_names:
+                gsm = gse.gsms[name]
+                if gsm.table is not None and not gsm.table.empty:
+                    # ID_REF と VALUE カラムを使う
+                    table = gsm.table.set_index("ID_REF")["VALUE"]
+                    expr_data[name] = table
+
+            if not expr_data:
+                st.error("発現データが見つかりませんでした")
+                st.stop()
+
+            # データフレームに変換
+            df_expr = pd.DataFrame(expr_data).dropna()
+            df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
+
+            st.success(f"発現データ取得完了: {len(df_expr)} プローブ")
+
+            # t 検定で差分解析
+            control_data = df_expr[control_samples].values
+            treatment_data = df_expr[treatment_samples].values
+
+            t_stats, p_values = stats.ttest_ind(
+                treatment_data, control_data, axis=1
+            )
+
+            # Fold Change を計算（log2スケール）
+            mean_control = np.mean(control_data, axis=1)
+            mean_treatment = np.mean(treatment_data, axis=1)
+            log2fc = mean_treatment - mean_control  # すでにlog2スケールの場合
+
+            # 多重検定補正（Benjamini-Hochberg法）
+            _, p_adj, _, _ = multipletests(p_values, method="fdr_bh")
+
+            # 結果をデータフレームにまとめる
+            df_results = pd.DataFrame({
+                "Probe": df_expr.index,
+                "Log2FoldChange": log2fc,
+                "p_value": p_values,
+                "p_adj": p_adj,
+            }).sort_values("p_adj")
+
+            # 有意な遺伝子のみ抽出
+            df_sig = df_results[
+                (df_results["p_adj"] < 0.05) &
+                (abs(df_results["Log2FoldChange"]) > 1)
+            ]
+
+            st.markdown("### 解析結果")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("総プローブ数", len(df_results))
+            with col2:
+                st.metric("有意な変化", len(df_sig))
+            with col3:
+                st.metric("上昇", len(df_sig[df_sig["Log2FoldChange"] > 0]))
+
+            st.markdown("### 有意に変化したプローブ（上位50件）")
+            st.dataframe(df_sig.head(50), use_container_width=True)
+
+            # セッションに結果を保存
+            st.session_state["df_results"] = df_results
+            st.session_state["df_sig"] = df_sig
+            st.success("解析完了！Visualization ページに進んでください")
+
+        except Exception as e:
+            st.error(f"解析中にエラーが発生しました: {e}")
+            st.exception(e)

@@ -3,3 +3,6 @@ streamlit-authenticator
 pyyaml
 GEOparse
 pandas
+pydeseq2
+scipy
+statsmodels
