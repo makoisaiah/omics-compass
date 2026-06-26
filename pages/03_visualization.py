@@ -29,7 +29,7 @@ df_sig = st.session_state["df_sig"]
 st.markdown(f"**有意な変化のあったプローブ数**: {len(df_sig)}")
 
 # タブで可視化を切り替え
-tab1, tab2, tab3, tab4 = st.tabs(["🌋 Volcano Plot", "🔥 Heatmap", "🗺️ Pathway Analysis", "🕸️ Network"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌋 Volcano Plot", "🔥 Heatmap", "🗺️ Pathway Analysis", "🕸️ Network", "⬆️ Upstream"])
 
 # --- タブ1: Volcano Plot ---
 with tab1:
@@ -311,3 +311,120 @@ with tab4:
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")
                 st.exception(e)
+
+# --- タブ5: 上流因子推定 ---
+with tab5:
+    st.markdown("### 上流因子推定")
+    st.markdown("""
+    発現変化した遺伝子群を制御していると考えられる転写因子を推定します。
+    IPA の上流解析に相当する機能です。
+    
+    - **CHEA**: 実験的に検証された転写因子ターゲットのデータベース
+    - **ENCODE**: ENCODE プロジェクトの転写因子結合データ
+    - **TRANSFAC**: 転写因子結合サイトのデータベース
+    """)
+
+    # 上流因子推定に使うデータベース
+    # gseapy enrichr を使った転写因子解析:
+    # https://maayanlab.cloud/Enrichr/#libraries
+    
+    upstream_db_options = [
+        "ENCODE_and_ChEA_Consensus_TFs_from_ChIP-X",
+        "ChEA_2022",
+        "TRANSFAC_and_JASPAR_PWMs",
+        "ENCODE_TF_ChIP-seq_2015",
+    ]
+
+    selected_upstream_db = st.selectbox(
+        "転写因子データベースを選択",
+        upstream_db_options,
+        help="CHEAは実験的証拠に基づく、TRANSFACはモチーフベースのデータベースです"
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        use_up = st.checkbox("発現上昇遺伝子を使う", value=True)
+    with col2:
+        use_down = st.checkbox("発現低下遺伝子を使う", value=True)
+
+    if st.button("上流因子推定を実行", type="primary"):
+        with st.spinner("解析中..."):
+            try:
+                # 使用する遺伝子リストを作成
+                gene_list_up = df_sig[
+                    df_sig["Log2FoldChange"] > 0
+                ]["Gene"].tolist()
+                gene_list_down = df_sig[
+                    df_sig["Log2FoldChange"] < 0
+                ]["Gene"].tolist()
+
+                # プローブIDが混入している場合は除外
+                gene_list_up = [g for g in gene_list_up if not g.endswith("_at")]
+                gene_list_down = [g for g in gene_list_down if not g.endswith("_at")]
+
+                combined_genes = []
+                if use_up:
+                    combined_genes += gene_list_up
+                if use_down:
+                    combined_genes += gene_list_down
+
+                if not combined_genes:
+                    st.error("遺伝子リストが空です")
+                    st.stop()
+
+                st.info(f"解析に使用する遺伝子数: {len(combined_genes)}")
+
+                # enrichr で転写因子解析
+                enr = gp.enrichr(
+                    gene_list=combined_genes,
+                    gene_sets=selected_upstream_db,
+                    organism="mouse",
+                    outdir=None
+                )
+
+                df_tf = enr.results.sort_values("Adjusted P-value")
+                df_tf_sig = df_tf[df_tf["Adjusted P-value"] < 0.05]
+
+                if df_tf_sig.empty:
+                    st.warning("有意な転写因子が見つかりませんでした。別のデータベースを試してください。")
+                else:
+                    st.success(f"{len(df_tf_sig)} 個の有意な上流転写因子が見つかりました")
+
+                    # 上位転写因子をバーチャートで表示
+                    df_top_tf = df_tf_sig.head(15).copy()
+                    df_top_tf["-log10(p_adj)"] = -np.log10(
+                        df_top_tf["Adjusted P-value"].clip(lower=1e-300)
+                    )
+
+                    fig5 = px.bar(
+                        df_top_tf.sort_values("-log10(p_adj)"),
+                        x="-log10(p_adj)",
+                        y="Term",
+                        orientation="h",
+                        title=f"推定される上流転写因子（{selected_upstream_db}）",
+                        color="-log10(p_adj)",
+                        color_continuous_scale="Purples"
+                    )
+                    st.plotly_chart(fig5, use_container_width=True)
+
+                    # 詳細テーブル
+                    st.markdown("### 詳細")
+                    st.dataframe(
+                        df_tf_sig[["Term", "Adjusted P-value", "Overlap", "Genes"]].head(20),
+                        width='stretch'
+                    )
+
+                    # DKK2 が関連する転写因子があるか確認
+                    dkk2_related = df_tf_sig[
+                        df_tf_sig["Genes"].str.contains("Dkk2|DKK2", case=False, na=False)
+                    ]
+                    if not dkk2_related.empty:
+                        st.markdown("### 🎯 DKK2 関連の転写因子")
+                        st.dataframe(dkk2_related[["Term", "Adjusted P-value", "Genes"]])
+                    else:
+                        st.info("DKK2 に直接関連する転写因子は見つかりませんでした")
+
+            except Exception as e:
+                st.error(f"エラーが発生しました: {e}")
+                st.exception(e)
+                                
