@@ -29,7 +29,7 @@ df_sig = st.session_state["df_sig"]
 st.markdown(f"**有意な変化のあったプローブ数**: {len(df_sig)}")
 
 # タブで可視化を切り替え
-tab1, tab2, tab3 = st.tabs(["🌋 Volcano Plot", "🔥 Heatmap", "🗺️ Pathway Analysis"])
+tab1, tab2, tab3, tab4 = st.tabs(["🌋 Volcano Plot", "🔥 Heatmap", "🗺️ Pathway Analysis", "🕸️ Network"])
 
 # --- タブ1: Volcano Plot ---
 with tab1:
