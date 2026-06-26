@@ -8,6 +8,7 @@ __pycache__/
 
 # 環境変数ファイル（APIキーなどを書く場合）
 .env
+.streamlit/secrets.toml
 
 # データファイル（大きいファイルは GitHub に上げない）
 data/
