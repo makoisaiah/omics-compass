@@ -57,7 +57,7 @@ if geo_id:
                     "ソース": gsm.metadata.get("source_name_ch1", ["不明"])[0],
                 })
             df_samples = pd.DataFrame(sample_info)
-            st.dataframe(df_samples, width='streatch')
+            st.dataframe(df_samples, width='stretch')
 
             # セッションにデータを保存（次のページで使えるように）
             st.session_state["gse"] = gse
