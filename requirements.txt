@@ -6,3 +6,5 @@ pandas
 pydeseq2
 scipy
 statsmodels
+plotly
+gseapy
