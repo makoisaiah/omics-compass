@@ -10,22 +10,19 @@ import yaml
 
 def load_auth():
     """Streamlit Secrets から認証情報を読み込む"""
-    # ローカル開発時は auth_config.yaml を使い、
-    # デプロイ時は Streamlit Cloud の Secrets を使う
     try:
-        # Streamlit Cloud の Secrets から読み込む
         config = {
-            "credentials": dict(st.secrets["credentials"]),
+            "credentials": {
+                "usernames": {
+                    k: dict(v) for k, v in st.secrets["credentials"]["usernames"].items()
+                }
+            },
             "cookie": dict(st.secrets["cookie"])
         }
-        # usernames の中身も dict に変換
-        config["credentials"]["usernames"] = {
-            k: dict(v) for k, v in st.secrets["credentials"]["usernames"].items()
-        }
-    except Exception:
-        # ローカル開発時は yaml ファイルから読み込む
-        with open("auth_config.yaml") as file:
-            config = yaml.safe_load(file)
+    except Exception as e:
+        st.error(f"認証情報の読み込みに失敗しました: {e}")
+        st.info("Streamlit の Secrets に認証情報を設定してください")
+        st.stop()
 
     authenticator = stauth.Authenticate(
         config["credentials"],
