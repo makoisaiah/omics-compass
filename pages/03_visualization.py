@@ -60,7 +60,7 @@ with tab1:
         y="-log10(p_adj)",
         color="分類",
         color_discrete_map=color_map,
-        hover_data=["Probe", "p_adj"],
+        hover_data=["Gene", "Probe", "p_adj"],
         title="Volcano Plot",
         labels={
             "Log2FoldChange": "Log2 Fold Change",
@@ -86,6 +86,7 @@ with tab2:
     else:
         gse = st.session_state["gse"]
         top_probes = df_sig.head(30)["Probe"].tolist()
+        probe_to_gene = df_sig.set_index("Probe")["Gene"].to_dict()
 
         # 発現データを再取得
         expr_data = {}
@@ -105,6 +106,7 @@ with tab2:
         if not df_heat.empty:
             # log2 変換
             df_heat = np.log2(df_heat.clip(lower=1e-10))
+            df_heat.index = df_heat.index.map(lambda x: probe_to_gene.get(x, x))
 
             fig2 = px.imshow(
                 df_heat,
@@ -122,7 +124,7 @@ with tab3:
 
     # プローブ ID を遺伝子シンボルに変換する必要があるが
     # まずプローブリストで試す
-    gene_list = df_sig["Probe"].tolist()
+    gene_list = df_sig["Gene"].tolist()
 
     db_options = [
         "KEGG_2021_Human",
