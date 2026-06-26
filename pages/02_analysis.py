@@ -5,12 +5,15 @@
 # https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html
 # 多重検定補正 (Benjamini-Hochberg):
 # https://www.statsmodels.org/stable/generated/statsmodels.stats.multitest.multipletests.html
+# mygene を使ったプローブ変換:
+# https://docs.mygene.info/projects/mygene-py/en/latest/
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
+import mygene
 
 st.title("🔬 Analysis")
 st.subheader("差分発現解析")
@@ -69,13 +72,10 @@ if st.button("差分解析を実行", type="primary"):
     with st.spinner("解析中..."):
         try:
             # 発現データを取得
-            # GEOparse でマイクロアレイの発現値を取得する方法:
-            # https://geoparse.readthedocs.io/en/latest/GEOparse.html
             expr_data = {}
             for name in sample_names:
                 gsm = gse.gsms[name]
                 if gsm.table is not None and not gsm.table.empty:
-                    # ID_REF と VALUE カラムを使う
                     table = gsm.table.set_index("ID_REF")["VALUE"]
                     expr_data[name] = table
 
@@ -97,7 +97,7 @@ if st.button("差分解析を実行", type="primary"):
                 treatment_data, control_data, axis=1
             )
 
-            # Fold Change を計算（log2スケール）
+            # Fold Change を計算
             mean_control = np.mean(control_data, axis=1)
             mean_treatment = np.mean(treatment_data, axis=1)
             mean_control_safe = np.where(mean_control > 0, mean_control, 1e-10)
@@ -119,8 +119,38 @@ if st.button("差分解析を実行", type="primary"):
             df_sig = df_results[
                 (df_results["p_adj"] < 0.05) &
                 (abs(df_results["Log2FoldChange"]) > 1)
-            ]
+            ].copy()
 
+            # ---- プローブ ID → 遺伝子シンボル変換 ----
+            with st.spinner("プローブ ID を遺伝子シンボルに変換中..."):
+                mg = mygene.MyGeneInfo()
+                probe_ids = df_results["Probe"].tolist()
+
+                result = mg.querymany(
+                    probe_ids,
+                    scopes="reporter",
+                    fields="symbol",
+                    species="mouse",
+                    returnall=True
+                )
+
+                probe_to_symbol = {}
+                for hit in result["out"]:
+                    if "symbol" in hit:
+                        probe_to_symbol[hit["query"]] = hit["symbol"]
+
+                df_results["Gene"] = df_results["Probe"].map(
+                    probe_to_symbol
+                ).fillna(df_results["Probe"])
+
+                df_sig["Gene"] = df_sig["Probe"].map(
+                    probe_to_symbol
+                ).fillna(df_sig["Probe"])
+
+                mapped = df_results["Gene"].ne(df_results["Probe"]).sum()
+                st.info(f"{mapped} / {len(df_results)} プローブを遺伝子シンボルに変換しました")
+
+            # ---- 結果表示 ----
             st.markdown("### 解析結果")
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -131,7 +161,10 @@ if st.button("差分解析を実行", type="primary"):
                 st.metric("上昇", len(df_sig[df_sig["Log2FoldChange"] > 0]))
 
             st.markdown("### 有意に変化したプローブ（上位50件）")
-            st.dataframe(df_sig.head(50), use_container_width=True)
+            st.dataframe(
+                df_sig[["Gene", "Probe", "Log2FoldChange", "p_value", "p_adj"]].head(50),
+                width='stretch'
+            )
 
             # セッションに結果を保存
             st.session_state["df_results"] = df_results
