@@ -1,6 +1,6 @@
 # OmicsCompass - メインアプリ
-# Streamlit の基本構造について:
-# https://docs.streamlit.io/get-started/fundamentals/main-concepts
+# Streamlit のマルチページアプリについて:
+# https://docs.streamlit.io/develop/concepts/multipage-apps/overview
 
 import streamlit as st
 
@@ -14,11 +14,14 @@ st.title("🧭 OmicsCompass")
 st.subheader("オミクスデータから経路を探索するツール")
 
 st.markdown("""
-### できること（予定）
-- 📥 GEO からRNA-seq データを取得
-- 🔬 差分発現解析
-- 🗺️ パスウェイ解析
-- 📊 インタラクティブな可視化
+### ナビゲーション
+左のサイドバーからページを選んでください。
+
+| ページ | 内容 |
+|--------|------|
+| 📥 Data Fetch | GEO からRNA-seq データを取得 |
+| 🔬 Analysis | 差分発現解析 |
+| 📊 Visualization | パスウェイ解析と可視化 |
 """)
 
 st.info("現在開発中です")
