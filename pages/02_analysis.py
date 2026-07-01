@@ -22,7 +22,6 @@ from components.llm import ask_llm, is_ollama_available
 st.title("🔬 Analysis")
 st.subheader("差分発現解析")
 
-# セッションにデータがあるか確認
 if "gse" not in st.session_state:
     st.warning("まず Data Fetch ページでデータを取得してください")
     st.stop()
@@ -32,11 +31,16 @@ geo_id = st.session_state.get("geo_id", "")
 
 st.markdown(f"**データセット**: {geo_id}")
 
-# サンプル一覧を表示してグループ分けを設定
-st.markdown("### グループ分け")
-st.markdown("各サンプルをコントロール群・処理群に割り当ててください")
-
 sample_names = list(gse.gsms.keys())
+
+# df_expr がセッションにある場合、実際に存在するサンプルのみに絞り込む
+if "df_expr" in st.session_state:
+    available = st.session_state["df_expr"].columns.tolist()
+    sample_names = [n for n in sample_names if n in available]
+    if not sample_names:
+        # カラム名が GSM ID でない場合（例: DMSO_HDM_rep1）は全サンプルを使う
+        sample_names = list(gse.gsms.keys())
+
 sample_titles = {
     name: gse.gsms[name].metadata.get("title", ["不明"])[0]
     for name in sample_names
@@ -44,7 +48,6 @@ sample_titles = {
 
 # LLM によるグループ自動推定
 st.markdown("### グループ自動推定")
-
 backend = "ローカル Mistral" if is_ollama_available() else "Groq API"
 st.info(f"使用する LLM: {backend}")
 
@@ -55,47 +58,46 @@ if st.button("LLM でグループを自動判定"):
     ])
     prompt = f"""You are a bioinformatics expert. Classify each RNA-seq sample as either control or treatment.
 
-    Rules:
-    - vehicle, DMSO, PBS, wild type, WT, sham, untreated, control → "コントロール"
-    - drug, inhibitor, knockdown, knockout, KO, overexpression, treated, mutant → "処理群"
-    - If unclear, use the biological context to decide
+Rules:
+- vehicle, DMSO, PBS, wild type, WT, sham, untreated, control → "コントロール"
+- drug, inhibitor, knockdown, knockout, KO, overexpression, treated, mutant → "処理群"
+- If unclear, use the biological context to decide
 
-    Sample list:
-    {sample_list}
+Sample list:
+{sample_list}
 
-    Reply ONLY with valid JSON. No explanation. No markdown. Example:
-    {{"GSM001": "コントロール", "GSM002": "処理群"}}
+Reply ONLY with valid JSON. No explanation. No markdown. Example:
+{{"GSM001": "コントロール", "GSM002": "処理群"}}
 
-    Your answer:"""
+Your answer:"""
 
     with st.spinner("LLM が判定中..."):
         try:
+            groq_key = None
             try:
                 groq_key = st.secrets["GROQ_API_KEY"]
             except Exception:
-                groq_key = None
+                pass
             result, used_backend = ask_llm(prompt, groq_key)
             st.success(f"{used_backend} で判定しました")
 
-            # JSON をパース
-            import re
             json_match = re.search(r'\{.*\}', result, re.DOTALL)
             if json_match:
                 suggestions = json.loads(json_match.group())
                 st.session_state["group_suggestions"] = suggestions
-                # プルダウンの session_state を強制的に更新
                 for sample_name, group_value in suggestions.items():
                     st.session_state[f"group_{sample_name}"] = group_value
                 st.markdown("**判定結果（確認して必要なら修正してください）**")
                 st.json(suggestions)
-#        else:
-#                st.warning("JSON の解析に失敗しました。手動で設定してください。")
+            else:
+                st.warning("JSON の解析に失敗しました。手動で設定してください。")
         except Exception as e:
             st.error(f"エラー: {e}")
 
 st.divider()
 
 # グループ割り当て UI
+st.markdown("### グループ分け")
 group_assignments = {}
 suggestions = st.session_state.get("group_suggestions", {})
 
@@ -111,9 +113,7 @@ for name in sample_names:
     with col1:
         st.text(f"{name}: {title[:40]}")
     with col2:
-        # LLM の判定結果があればそれをデフォルトに、なければコントロール
         suggested = suggestions.get(name, "コントロール")
-        # セッションにすでに選択済みの値があればそれを優先
         if f"group_{name}" not in st.session_state:
             st.session_state[f"group_{name}"] = suggested
         group = st.selectbox(
@@ -124,7 +124,6 @@ for name in sample_names:
         )
         group_assignments[name] = group
 
-# 自動判定結果の概要を表示
 if suggestions:
     n_control = sum(1 for v in suggestions.values() if v == "コントロール")
     n_treatment = sum(1 for v in suggestions.values() if v == "処理群")
@@ -141,10 +140,14 @@ if st.button("差分解析を実行", type="primary"):
 
     with st.spinner("解析中..."):
         try:
-            # 発現データをセッションから取得
+            # 発現データを取得
             if "df_expr" in st.session_state:
-                df_expr = st.session_state["df_expr"]
-                st.success(f"発現データ取得完了: {len(df_expr)} プローブ")
+                df_expr = st.session_state["df_expr"].copy()
+                # カラム名が GSM ID でない場合、順番で対応付け
+                if not any(s in df_expr.columns for s in control_samples):
+                    col_map = dict(zip(df_expr.columns, sample_names))
+                    df_expr = df_expr.rename(columns=col_map)
+                    st.info(f"カラム対応付け: {col_map}")
             else:
                 # マイクロアレイの場合は GSM テーブルから取得
                 expr_data = {}
@@ -160,71 +163,16 @@ if st.button("差分解析を実行", type="primary"):
 
                 df_expr = pd.DataFrame(expr_data).dropna()
                 df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
-                st.success(f"発現データ取得完了: {len(df_expr)} プローブ")
-                
-                ftp_url = None
-                for f in supp_files:
-                    if f.endswith(".txt.gz") or f.endswith(".csv.gz") or f.endswith(".tsv.gz"):
-                        ftp_url = f
-                        break
-                
-                if ftp_url:
-                    import io
-                    import gzip
-                    # FTP URL を HTTPS に変換
-                    https_url = ftp_url.replace(
-                        "ftp://ftp.ncbi.nlm.nih.gov",
-                        "https://ftp.ncbi.nlm.nih.gov"
-                    )
-                    st.info(f"ダウンロード中: {https_url}")
-                    response = requests.get(https_url, timeout=60)
-                    
-                    with gzip.open(io.BytesIO(response.content), 'rt') as f:
-                        df_expr = pd.read_csv(f, sep='\t', index_col=0)
-                    
-                    # カラム名をサンプル ID に合わせる
-                    st.info(f"補足ファイルのカラム: {df_expr.columns.tolist()}")
-                    df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
-
-                    # カラム名（実験名）をサンプル ID に対応付ける
-                    # GEO のサンプルタイトルと補足ファイルのカラム名を照合
-                    col_to_gsm = {}
-                    for gsm_name, gsm in gse.gsms.items():
-                        title = gsm.metadata.get("title", [""])[0]
-                        for col in df_expr.columns:
-                            # タイトルとカラム名の部分一致で対応付け
-                            col_clean = col.replace(" ", "_").replace("-", "_").lower()
-                            title_clean = title.replace(" ", "_").replace("-", "_").lower()
-                            if col_clean in title_clean or title_clean in col_clean:
-                                col_to_gsm[col] = gsm_name
-                                break
-
-                    st.info(f"カラム対応付け: {col_to_gsm}")
-
-                    if col_to_gsm:
-                        df_expr = df_expr.rename(columns=col_to_gsm)
-                    else:
-                        # 自動対応付けに失敗した場合、順番で対応付け
-                        st.warning("自動対応付けに失敗しました。サンプルの順番で対応付けます")
-                        col_map = dict(zip(df_expr.columns, sample_names))
-                        df_expr = df_expr.rename(columns=col_map)
-                        st.info(f"順番による対応付け: {col_map}")
-                else:
-                    st.error("補足ファイルが見つかりませんでした")
-                    st.stop()
-            else:
-                df_expr = pd.DataFrame(expr_data).dropna()
-                df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
 
             st.success(f"発現データ取得完了: {len(df_expr)} プローブ")
 
-            # df_expr に存在するサンプルのみに絞り込む
+            # 利用可能なサンプルに絞り込む
             available_samples = df_expr.columns.tolist()
             control_samples = [s for s in control_samples if s in available_samples]
             treatment_samples = [s for s in treatment_samples if s in available_samples]
 
             if not control_samples or not treatment_samples:
-                st.error(f"有効なサンプルが不足しています。利用可能なサンプル: {available_samples}")
+                st.error(f"有効なサンプルが不足しています。利用可能: {available_samples}")
                 st.stop()
 
             st.info(f"解析に使用するサンプル → コントロール: {control_samples} / 処理群: {treatment_samples}")
@@ -244,10 +192,9 @@ if st.button("差分解析を実行", type="primary"):
             mean_treatment_safe = np.where(mean_treatment > 0, mean_treatment, 1e-10)
             log2fc = np.log2(mean_treatment_safe) - np.log2(mean_control_safe)
 
-            # 多重検定補正（Benjamini-Hochberg法）
+            # 多重検定補正
             _, p_adj, _, _ = multipletests(p_values, method="fdr_bh")
 
-            # 結果をデータフレームにまとめる
             df_results = pd.DataFrame({
                 "Probe": df_expr.index,
                 "Log2FoldChange": log2fc,
@@ -255,20 +202,19 @@ if st.button("差分解析を実行", type="primary"):
                 "p_adj": p_adj,
             }).sort_values("p_adj")
 
-            # 有意な遺伝子のみ抽出
             df_sig = df_results[
                 (df_results["p_adj"] < 0.05) &
                 (abs(df_results["Log2FoldChange"]) > 1)
             ].copy()
 
-            # ---- プローブ ID → 遺伝子シンボル変換 ----
+            # プローブ ID → 遺伝子シンボル変換
             with st.spinner("プローブ ID を遺伝子シンボルに変換中..."):
                 mg = mygene.MyGeneInfo()
                 probe_ids = df_results["Probe"].tolist()
 
                 result = mg.querymany(
                     probe_ids,
-                    scopes="reporter",
+                    scopes="reporter,symbol",
                     fields="symbol",
                     species="mouse",
                     returnall=True
@@ -282,7 +228,6 @@ if st.button("差分解析を実行", type="primary"):
                 df_results["Gene"] = df_results["Probe"].map(
                     probe_to_symbol
                 ).fillna(df_results["Probe"])
-
                 df_sig["Gene"] = df_sig["Probe"].map(
                     probe_to_symbol
                 ).fillna(df_sig["Probe"])
@@ -290,7 +235,7 @@ if st.button("差分解析を実行", type="primary"):
                 mapped = df_results["Gene"].ne(df_results["Probe"]).sum()
                 st.info(f"{mapped} / {len(df_results)} プローブを遺伝子シンボルに変換しました")
 
-            # ---- 結果表示 ----
+            # 結果表示
             st.markdown("### 解析結果")
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -306,7 +251,6 @@ if st.button("差分解析を実行", type="primary"):
                 width='stretch'
             )
 
-            # セッションに結果を保存
             st.session_state["df_results"] = df_results
             st.session_state["df_sig"] = df_sig
             st.success("解析完了！Visualization ページに進んでください")
