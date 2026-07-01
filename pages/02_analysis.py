@@ -53,17 +53,20 @@ if st.button("LLM でグループを自動判定"):
         f"{name}: {sample_titles[name]}"
         for name in sample_names
     ])
-    prompt = f"""以下は RNA-seq 実験のサンプル一覧です。
-各サンプルがコントロール群か処理群かを判定してください。
+    prompt = f"""You are a bioinformatics expert. Classify each RNA-seq sample as either control or treatment.
 
-サンプル一覧:
-{sample_list}
+    Rules:
+    - vehicle, DMSO, PBS, wild type, WT, sham, untreated, control → "コントロール"
+    - drug, inhibitor, knockdown, knockout, KO, overexpression, treated, mutant → "処理群"
+    - If unclear, use the biological context to decide
 
-以下の JSON 形式のみで回答してください。他の文章は不要です。
-{{
-  "サンプルID": "コントロール" または "処理群",
-  ...
-}}"""
+    Sample list:
+    {sample_list}
+
+    Reply ONLY with valid JSON. No explanation. No markdown. Example:
+    {{"GSM001": "コントロール", "GSM002": "処理群"}}
+
+    Your answer:"""
 
     with st.spinner("LLM が判定中..."):
         try:

@@ -42,7 +42,8 @@ def ask_groq(prompt: str, api_key: str) -> str:
         json={
             "model": "llama-3.1-8b-instant",
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 500
+            "max_tokens": 500,
+            "temperature": 0.1
         },
         timeout=30
     )
