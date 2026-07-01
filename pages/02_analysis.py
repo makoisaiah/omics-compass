@@ -141,33 +141,26 @@ if st.button("差分解析を実行", type="primary"):
 
     with st.spinner("解析中..."):
         try:
-            # 発現データを取得
-            # まず GSM テーブルから試みる
-            expr_data = {}
-            for name in sample_names:
-                gsm = gse.gsms[name]
-                if gsm.table is not None and not gsm.table.empty:
-                    table = gsm.table.set_index("ID_REF")["VALUE"]
-                    expr_data[name] = table
+            # 発現データをセッションから取得
+            if "df_expr" in st.session_state:
+                df_expr = st.session_state["df_expr"]
+                st.success(f"発現データ取得完了: {len(df_expr)} プローブ")
+            else:
+                # マイクロアレイの場合は GSM テーブルから取得
+                expr_data = {}
+                for name in sample_names:
+                    gsm = gse.gsms[name]
+                    if gsm.table is not None and not gsm.table.empty:
+                        table = gsm.table.set_index("ID_REF")["VALUE"]
+                        expr_data[name] = table
 
-            if not expr_data:
-                # GSM テーブルが空の場合、GSE の補足ファイルから取得を試みる
-                # https://geoparse.readthedocs.io/en/latest/
-                st.info("個別サンプルのテーブルが空のため、補足ファイルから取得を試みます...")
-                
-                supp_files = gse.metadata.get("supplementary_file", [])
-                
-                # SubSeries の補足ファイルも確認
-                if not supp_files:
-                    import GEOparse
-                    for relation in gse.metadata.get("relation", []):
-                        if "SubSeries of" not in relation and "SuperSeries of" not in relation:
-                            continue
-                        # SubSeries の GSE ID を取得
-                    # 直接 FTP から取得
-                    supp_files = [
-                        f"ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE190nnn/GSE190343/suppl/GSE190343_inhibitor_normalized.txt.gz"
-                    ]
+                if not expr_data:
+                    st.error("発現データが見つかりません。Data Fetch ページで「発現データを取得」ボタンを押してください。")
+                    st.stop()
+
+                df_expr = pd.DataFrame(expr_data).dropna()
+                df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
+                st.success(f"発現データ取得完了: {len(df_expr)} プローブ")
                 
                 ftp_url = None
                 for f in supp_files:
