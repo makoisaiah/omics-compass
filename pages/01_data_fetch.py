@@ -34,6 +34,11 @@ if geo_id:
 
     geo_id = geo_id.strip().upper()
 
+    # 新しい GEO ID が入力されたらセッションをリセット
+    if st.session_state.get("geo_id") != geo_id:
+        for key in ["df_expr", "expr_columns", "gse", "df_results", "df_sig", "group_suggestions"]:
+            st.session_state.pop(key, None)
+
     # GEOparse を呼ぶ前に NCBI API で存在確認
     with st.spinner(f"{geo_id} の存在を確認中..."):
         try:
