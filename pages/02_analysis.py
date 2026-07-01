@@ -190,6 +190,30 @@ if st.button("差分解析を実行", type="primary"):
                     # カラム名をサンプル ID に合わせる
                     st.info(f"補足ファイルのカラム: {df_expr.columns.tolist()}")
                     df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
+
+                    # カラム名（実験名）をサンプル ID に対応付ける
+                    # GEO のサンプルタイトルと補足ファイルのカラム名を照合
+                    col_to_gsm = {}
+                    for gsm_name, gsm in gse.gsms.items():
+                        title = gsm.metadata.get("title", [""])[0]
+                        for col in df_expr.columns:
+                            # タイトルとカラム名の部分一致で対応付け
+                            col_clean = col.replace(" ", "_").replace("-", "_").lower()
+                            title_clean = title.replace(" ", "_").replace("-", "_").lower()
+                            if col_clean in title_clean or title_clean in col_clean:
+                                col_to_gsm[col] = gsm_name
+                                break
+
+                    st.info(f"カラム対応付け: {col_to_gsm}")
+
+                    if col_to_gsm:
+                        df_expr = df_expr.rename(columns=col_to_gsm)
+                    else:
+                        # 自動対応付けに失敗した場合、順番で対応付け
+                        st.warning("自動対応付けに失敗しました。サンプルの順番で対応付けます")
+                        col_map = dict(zip(df_expr.columns, sample_names))
+                        df_expr = df_expr.rename(columns=col_map)
+                        st.info(f"順番による対応付け: {col_map}")
                 else:
                     st.error("補足ファイルが見つかりませんでした")
                     st.stop()
