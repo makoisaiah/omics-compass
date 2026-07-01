@@ -79,9 +79,13 @@ if st.button("LLM でグループを自動判定"):
             if json_match:
                 suggestions = json.loads(json_match.group())
                 st.session_state["group_suggestions"] = suggestions
+                # プルダウンの session_state を強制的に更新
+                for sample_name, group_value in suggestions.items():
+                    st.session_state[f"group_{sample_name}"] = group_value
                 st.markdown("**判定結果（確認して必要なら修正してください）**")
                 st.json(suggestions)
-            else:
+                st.rerun()
+        else:
                 st.warning("JSON の解析に失敗しました。手動で設定してください。")
         except Exception as e:
             st.error(f"エラー: {e}")
