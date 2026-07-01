@@ -16,6 +16,7 @@ import re
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 import mygene
+import requests
 from components.llm import ask_llm, is_ollama_available
 
 st.title("🔬 Analysis")
