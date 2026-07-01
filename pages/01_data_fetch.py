@@ -112,7 +112,6 @@ if geo_id:
 
     # 補足ファイルの確認
     st.markdown("### 補足ファイル")
-    supp_files = gse.metadata.get("supplementary_file", [])
     
     if supp_files:
         for f in supp_files:
