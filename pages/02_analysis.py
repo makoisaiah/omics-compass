@@ -64,7 +64,10 @@ if st.button("LLM でグループを自動判定"):
 
     with st.spinner("LLM が判定中..."):
         try:
-            groq_key = st.secrets.get("GROQ_API_KEY", None)
+            try:
+                groq_key = st.secrets["GROQ_API_KEY"]
+            except Exception:
+                groq_key = None
             result, used_backend = ask_llm(prompt, groq_key)
             st.success(f"{used_backend} で判定しました")
 
