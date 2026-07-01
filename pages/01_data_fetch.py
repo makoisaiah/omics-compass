@@ -161,8 +161,33 @@ if geo_id:
         else:
             st.warning("自動検出できる発現データファイルがありません。手動で確認してください。")
     else:
-        st.warning("補足ファイルが見つかりませんでした。マイクロアレイデータの場合は Analysis ページで直接解析できます。")
-        # マイクロアレイの場合はそのままセッションに保存
-        st.session_state["gse"] = gse
-        st.session_state["geo_id"] = geo_id
-        st.success("データを読み込みました。Analysis ページに進んでください。")
+        st.warning("補足ファイルが見つかりませんでした。マイクロアレイデータとして処理します。")
+        
+        if st.button("マイクロアレイデータを取得", type="primary"):
+            with st.spinner("サンプルデータを取得中..."):
+                try:
+                    # GSM テーブルから発現データを取得
+                    expr_data = {}
+                    for gsm_name, gsm in gse.gsms.items():
+                        if gsm.table is not None and not gsm.table.empty:
+                            if "ID_REF" in gsm.table.columns and "VALUE" in gsm.table.columns:
+                                table = gsm.table.set_index("ID_REF")["VALUE"]
+                                expr_data[gsm_name] = table
+
+                    if expr_data:
+                        df_expr = pd.DataFrame(expr_data).dropna()
+                        df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
+                        st.success(f"発現データ取得完了: {len(df_expr)} プローブ x {len(df_expr.columns)} サンプル")
+                        st.dataframe(df_expr.head(), width='stretch')
+
+                        st.session_state["gse"] = gse
+                        st.session_state["geo_id"] = geo_id
+                        st.session_state["df_expr"] = df_expr
+                        st.success("データを読み込みました。Analysis ページに進んでください。")
+                    else:
+                        # テーブルが空の場合は gse だけ保存して Analysis に委ねる
+                        st.session_state["gse"] = gse
+                        st.session_state["geo_id"] = geo_id
+                        st.info("サンプルテーブルが空です。Analysis ページで解析を試みてください。")
+                except Exception as e:
+                    st.error(f"エラー: {e}")
