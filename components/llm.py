@@ -46,7 +46,16 @@ def ask_groq(prompt: str, api_key: str) -> str:
         },
         timeout=30
     )
-    return response.json()["choices"][0]["message"]["content"]
+    
+    # ステータスコードとレスポンス全体を例外に含める
+    if response.status_code != 200:
+        raise Exception(f"HTTP {response.status_code}: {response.text}")
+    
+    result = response.json()
+    if "choices" not in result:
+        raise Exception(f"choices なし。レスポンス全体: {result}")
+    
+    return result["choices"][0]["message"]["content"]
 
 def ask_llm(prompt: str, groq_api_key: str = None) -> tuple[str, str]:
     """
