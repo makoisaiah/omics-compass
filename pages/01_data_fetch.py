@@ -13,97 +13,79 @@ import gzip
 import io
 
 st.title("📥 Data Fetch")
-st.subheader("GEO からRNA-seq データを取得")
-
-st.markdown("""
-GEO（Gene Expression Omnibus）から公開データセットを取得します。
-データセット ID（例: GSE21393）を入力してください。
-""")
+st.subheader("GEO からRNA-seq・マイクロアレイデータを取得")
 
 geo_id = st.text_input(
     "GEO データセット ID",
-    placeholder="例: GSE190343",
+    placeholder="例: GSE21393",
     help="NCBI GEO で検索して見つけた ID を入力してください"
 )
 
 if geo_id:
-    # GEO ID の形式チェック
     if not re.match(r'^GSE\d+$', geo_id.strip().upper()):
-        st.error("GEO ID の形式が正しくありません。GSE から始まる番号を入力してください")
+        st.error("GSE から始まる番号を入力してください（例: GSE21393）")
         st.stop()
 
     geo_id = geo_id.strip().upper()
 
     # 新しい GEO ID が入力されたらセッションをリセット
     if st.session_state.get("geo_id") != geo_id:
-        for key in ["df_expr", "expr_columns", "gse", "df_results", "df_sig", "group_suggestions"]:
+        for key in ["df_expr", "gse", "df_results", "df_sig", "group_suggestions"]:
             st.session_state.pop(key, None)
 
-    # GEOparse を呼ぶ前に NCBI API で存在確認
-    with st.spinner(f"{geo_id} の存在を確認中..."):
+    # NCBI API で存在確認
+    with st.spinner(f"{geo_id} を確認中..."):
         try:
             check = requests.get(
-                f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+                "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
                 params={"db": "gds", "term": geo_id, "retmode": "json"},
                 timeout=10
             )
-            result = check.json()
-            count = int(result["esearchresult"]["count"])
+            count = int(check.json()["esearchresult"]["count"])
             if count == 0:
-                st.error(f"{geo_id} は GEO に存在しません。ID を確認してください。")
+                st.error(f"{geo_id} は GEO に存在しません")
                 st.stop()
         except Exception:
-            pass  # 確認できなくても続行
+            pass
 
+    # メタデータ取得
     with st.spinner(f"{geo_id} のメタデータを取得中..."):
         try:
             gse = GEOparse.get_GEO(
                 geo=geo_id,
                 destdir="/tmp",
                 silent=True,
-                include_data=False  # メタデータのみ、発現データは後で取得
+                include_data=False
             )
         except Exception as e:
             st.error(f"メタデータの取得に失敗しました: {e}")
             st.stop()
 
-    # 補足ファイルを NCBI FTP から直接探す
-    # GEO の FTP 構造: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSExxx nnn/GSExxxx/suppl/
-    geo_num = geo_id.replace("GSE", "")
-    ftp_base = f"https://ftp.ncbi.nlm.nih.gov/geo/series/GSE{geo_num[:-3]}nnn/{geo_id}/suppl/"
-
-    with st.spinner("補足ファイルを検索中..."):
-        try:
-            response = requests.get(ftp_base, timeout=10)
-            # HTML からファイル名を抽出
-            file_matches = re.findall(
-                rf'href="({geo_id}_[^"]+\.(?:txt|csv|tsv)\.gz)"',
-                response.text
-            )
-            supp_files = [ftp_base + f for f in file_matches]
-        except Exception:
-            supp_files = []
-
-    st.success("メタデータ取得成功！")
-
     # 基本情報を表示
-    st.markdown("### データセット情報")
+    st.success("メタデータ取得成功！")
+    st.markdown(f"**タイトル**: {gse.metadata.get('title', ['不明'])[0]}")
+    st.markdown(f"**概要**: {gse.metadata.get('summary', ['不明'])[0][:300]}")
+
     col1, col2 = st.columns(2)
     with col1:
         st.metric("サンプル数", len(gse.gsms))
     with col2:
         st.metric("プラットフォーム数", len(gse.gpls))
 
-    st.markdown(f"**タイトル**: {gse.metadata.get('title', ['不明'])[0]}")
-    st.markdown(f"**概要**: {gse.metadata.get('summary', ['不明'])[0][:500]}")
-
-    # SuperSeries の場合は SubSeries を案内
+    # SuperSeries チェック
     relations = gse.metadata.get("relation", [])
-    subseries = [r.split(": ")[-1] for r in relations if "SubSeries of" not in r and "GSE" in r]
+    subseries = [
+        r.split("SuperSeries of: ")[-1].strip()
+        for r in relations
+        if "SuperSeries of:" in r
+    ]
     if subseries:
-        st.warning(f"このデータセットは SubSeries を含む SuperSeries です。以下の SubSeries を直接指定することをおすすめします: {', '.join(subseries)}")
+        st.warning(f"このデータセットは SuperSeries です。以下の SubSeries を直接指定することをおすすめします。")
+        for s in subseries:
+            st.code(s)
+        st.stop()
 
-    # サンプル一覧を表示
+    # サンプル一覧
     st.markdown("### サンプル一覧")
     sample_info = []
     for gsm_name, gsm in gse.gsms.items():
@@ -112,63 +94,69 @@ if geo_id:
             "タイトル": gsm.metadata.get("title", ["不明"])[0],
             "ソース": gsm.metadata.get("source_name_ch1", ["不明"])[0],
         })
-    df_samples = pd.DataFrame(sample_info)
-    st.dataframe(df_samples, width='stretch')
+    st.dataframe(pd.DataFrame(sample_info), width='stretch')
 
-    # 補足ファイルの確認
-    st.markdown("### 補足ファイル")
-    
+    # データ種別を判定
+    series_type = gse.metadata.get("type", [""])[0].lower()
+    is_rnaseq = "high throughput sequencing" in series_type
+
+    # 補足ファイルを FTP から探す
+    geo_num = geo_id.replace("GSE", "")
+    ftp_base = f"https://ftp.ncbi.nlm.nih.gov/geo/series/GSE{geo_num[:-3]}nnn/{geo_id}/suppl/"
+    supp_files = []
+    try:
+        resp = requests.get(ftp_base, timeout=10)
+        matches = re.findall(
+            rf'href="({geo_id}_[^"]+\.(?:txt|csv|tsv)\.gz)"',
+            resp.text
+        )
+        supp_files = [ftp_base + f for f in matches]
+    except Exception:
+        pass
+
+    st.markdown("### データ取得")
+
     if supp_files:
+        # RNA-seq: 補足ファイルから取得
+        st.info(f"補足ファイルを検出しました（RNA-seq）")
         for f in supp_files:
-            st.text(f)
-        
-        # txt.gz または csv.gz ファイルを自動選択
-        selected_file = None
-        for f in supp_files:
-            if any(f.endswith(ext) for ext in [".txt.gz", ".csv.gz", ".tsv.gz"]):
-                selected_file = f
-                break
-        
-        if selected_file:
-            st.success(f"発現データファイルを検出: {selected_file.split('/')[-1]}")
-            
-            if st.button("発現データを取得", type="primary"):
-                with st.spinner("ダウンロード中..."):
-                    try:
-                        https_url = selected_file.replace(
-                            "ftp://ftp.ncbi.nlm.nih.gov",
-                            "https://ftp.ncbi.nlm.nih.gov"
-                        )
-                        response = requests.get(https_url, timeout=120)
-                        
-                        with gzip.open(io.BytesIO(response.content), 'rt') as f:
-                            df_expr = pd.read_csv(f, sep='\t', index_col=0, low_memory=False)
-                        
-                        df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
-                        
-                        st.success(f"発現データ取得完了: {len(df_expr)} 遺伝子 x {len(df_expr.columns)} サンプル")
-                        st.dataframe(df_expr.head(), width='stretch')
-                        
-                        # セッションに保存
-                        st.session_state["gse"] = gse
-                        st.session_state["geo_id"] = geo_id
-                        st.session_state["df_expr"] = df_expr
-                        st.session_state["expr_columns"] = df_expr.columns.tolist()
-                        st.success("データを読み込みました。Analysis ページに進んでください。")
-                        
-                    except Exception as e:
-                        st.error(f"発現データの取得に失敗しました: {e}")
-        else:
-            st.warning("自動検出できる発現データファイルがありません。手動で確認してください。")
-    else:
-        st.warning("補足ファイルが見つかりませんでした。マイクロアレイデータとして処理します。")
-        
-        if st.button("マイクロアレイデータを取得", type="primary"):
-            with st.spinner("サンプルデータを取得中..."):
+            st.text(f.split("/")[-1])
+
+        selected_file = supp_files[0]
+
+        if st.button("発現データを取得", type="primary"):
+            with st.spinner("ダウンロード中..."):
                 try:
-                    # GSM テーブルから発現データを取得
+                    response = requests.get(selected_file, timeout=120)
+                    with gzip.open(io.BytesIO(response.content), 'rt') as f:
+                        df_expr = pd.read_csv(f, sep='\t', index_col=0, low_memory=False)
+                    df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
+
+                    st.success(f"取得完了: {len(df_expr)} 遺伝子 x {len(df_expr.columns)} サンプル")
+                    st.dataframe(df_expr.head(), width='stretch')
+
+                    st.session_state["gse"] = gse
+                    st.session_state["geo_id"] = geo_id
+                    st.session_state["df_expr"] = df_expr
+                    st.success("Analysis ページに進んでください。")
+                except Exception as e:
+                    st.error(f"取得に失敗しました: {e}")
+
+    else:
+        # マイクロアレイ: GSM テーブルから取得
+        st.info("補足ファイルなし。マイクロアレイデータとして取得します。")
+
+        if st.button("マイクロアレイデータを取得", type="primary"):
+            with st.spinner("サンプルデータを取得中（時間がかかる場合があります）..."):
+                try:
+                    # include_data=False で取得したので改めてフルで取得
+                    gse_full = GEOparse.get_GEO(
+                        geo=geo_id,
+                        destdir="/tmp",
+                        silent=True
+                    )
                     expr_data = {}
-                    for gsm_name, gsm in gse.gsms.items():
+                    for gsm_name, gsm in gse_full.gsms.items():
                         if gsm.table is not None and not gsm.table.empty:
                             if "ID_REF" in gsm.table.columns and "VALUE" in gsm.table.columns:
                                 table = gsm.table.set_index("ID_REF")["VALUE"]
@@ -177,17 +165,15 @@ if geo_id:
                     if expr_data:
                         df_expr = pd.DataFrame(expr_data).dropna()
                         df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
-                        st.success(f"発現データ取得完了: {len(df_expr)} プローブ x {len(df_expr.columns)} サンプル")
+
+                        st.success(f"取得完了: {len(df_expr)} プローブ x {len(df_expr.columns)} サンプル")
                         st.dataframe(df_expr.head(), width='stretch')
 
-                        st.session_state["gse"] = gse
+                        st.session_state["gse"] = gse_full
                         st.session_state["geo_id"] = geo_id
                         st.session_state["df_expr"] = df_expr
-                        st.success("データを読み込みました。Analysis ページに進んでください。")
+                        st.success("Analysis ページに進んでください。")
                     else:
-                        # テーブルが空の場合は gse だけ保存して Analysis に委ねる
-                        st.session_state["gse"] = gse
-                        st.session_state["geo_id"] = geo_id
-                        st.info("サンプルテーブルが空です。Analysis ページで解析を試みてください。")
+                        st.error("発現データが見つかりませんでした")
                 except Exception as e:
-                    st.error(f"エラー: {e}")
+                    st.error(f"取得に失敗しました: {e}")
