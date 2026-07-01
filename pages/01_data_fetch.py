@@ -34,16 +34,29 @@ if geo_id:
 
     geo_id = geo_id.strip().upper()
 
+    # GEOparse を呼ぶ前に NCBI API で存在確認
+    with st.spinner(f"{geo_id} の存在を確認中..."):
+        try:
+            check = requests.get(
+                f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+                params={"db": "gds", "term": geo_id, "retmode": "json"},
+                timeout=10
+            )
+            result = check.json()
+            count = int(result["esearchresult"]["count"])
+            if count == 0:
+                st.error(f"{geo_id} は GEO に存在しません。ID を確認してください。")
+                st.stop()
+        except Exception:
+            pass  # 確認できなくても続行
+
     with st.spinner(f"{geo_id} のメタデータを取得中..."):
         try:
-            # メタデータのみ取得（発現データは取得しない）
-            # silent=True でログを抑制
-            # Silent parsing to avoid memory issues with large datasets
             gse = GEOparse.get_GEO(
                 geo=geo_id,
                 destdir="/tmp",
                 silent=True,
-                how="brief"  # メタデータのみ取得
+                how="brief"
             )
         except Exception as e:
             st.error(f"メタデータの取得に失敗しました: {e}")
