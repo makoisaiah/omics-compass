@@ -90,6 +90,8 @@ st.divider()
 
 # グループ割り当て UI
 group_assignments = {}
+suggestions = st.session_state.get("group_suggestions", {})
+
 cols = st.columns(2)
 with cols[0]:
     st.markdown("**コントロール群**")
@@ -102,16 +104,24 @@ for name in sample_names:
     with col1:
         st.text(f"{name}: {title[:40]}")
     with col2:
-        suggestions = st.session_state.get("group_suggestions", {})
-        default_idx = 0 if suggestions.get(name, "コントロール") == "コントロール" else 1
+        # LLM の判定結果があればそれをデフォルトに、なければコントロール
+        suggested = suggestions.get(name, "コントロール")
+        # セッションにすでに選択済みの値があればそれを優先
+        if f"group_{name}" not in st.session_state:
+            st.session_state[f"group_{name}"] = suggested
         group = st.selectbox(
             label=name,
             options=["コントロール", "処理群"],
-            index=default_idx,
             key=f"group_{name}",
             label_visibility="collapsed"
         )
         group_assignments[name] = group
+
+# 自動判定結果の概要を表示
+if suggestions:
+    n_control = sum(1 for v in suggestions.values() if v == "コントロール")
+    n_treatment = sum(1 for v in suggestions.values() if v == "処理群")
+    st.caption(f"LLM 判定: コントロール {n_control} サンプル、処理群 {n_treatment} サンプル　※必要に応じて手動で修正できます")
 
 # 解析実行ボタン
 if st.button("差分解析を実行", type="primary"):
