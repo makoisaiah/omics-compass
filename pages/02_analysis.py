@@ -14,6 +14,7 @@ import numpy as np
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 import mygene
+from components.llm import ask_llm, is_ollama_available
 
 st.title("🔬 Analysis")
 st.subheader("差分発現解析")
@@ -38,6 +39,50 @@ sample_titles = {
     for name in sample_names
 }
 
+# LLM によるグループ自動推定
+st.markdown("### グループ自動推定")
+
+backend = "ローカル Mistral" if is_ollama_available() else "Groq API"
+st.info(f"使用する LLM: {backend}")
+
+if st.button("LLM でグループを自動判定"):
+    sample_list = "\n".join([
+        f"{name}: {sample_titles[name]}"
+        for name in sample_names
+    ])
+    prompt = f"""以下は RNA-seq 実験のサンプル一覧です。
+各サンプルがコントロール群か処理群かを判定してください。
+
+サンプル一覧:
+{sample_list}
+
+以下の JSON 形式のみで回答してください。他の文章は不要です。
+{{
+  "サンプルID": "コントロール" または "処理群",
+  ...
+}}"""
+
+    with st.spinner("LLM が判定中..."):
+        try:
+            groq_key = st.secrets.get("GROQ_API_KEY", None)
+            result, used_backend = ask_llm(prompt, groq_key)
+            st.success(f"{used_backend} で判定しました")
+
+            # JSON をパース
+            import re
+            json_match = re.search(r'\{.*\}', result, re.DOTALL)
+            if json_match:
+                suggestions = json.loads(json_match.group())
+                st.session_state["group_suggestions"] = suggestions
+                st.markdown("**判定結果（確認して必要なら修正してください）**")
+                st.json(suggestions)
+            else:
+                st.warning("JSON の解析に失敗しました。手動で設定してください。")
+        except Exception as e:
+            st.error(f"エラー: {e}")
+
+st.divider()
+
 # グループ割り当て UI
 group_assignments = {}
 cols = st.columns(2)
@@ -52,9 +97,12 @@ for name in sample_names:
     with col1:
         st.text(f"{name}: {title[:40]}")
     with col2:
+        suggestions = st.session_state.get("group_suggestions", {})
+        default_idx = 0 if suggestions.get(name, "コントロール") == "コントロール" else 1
         group = st.selectbox(
             label=name,
             options=["コントロール", "処理群"],
+            index=default_idx,
             key=f"group_{name}",
             label_visibility="collapsed"
         )
