@@ -223,6 +223,17 @@ if st.button("差分解析を実行", type="primary"):
 
             st.success(f"発現データ取得完了: {len(df_expr)} プローブ")
 
+            # df_expr に存在するサンプルのみに絞り込む
+            available_samples = df_expr.columns.tolist()
+            control_samples = [s for s in control_samples if s in available_samples]
+            treatment_samples = [s for s in treatment_samples if s in available_samples]
+
+            if not control_samples or not treatment_samples:
+                st.error(f"有効なサンプルが不足しています。利用可能なサンプル: {available_samples}")
+                st.stop()
+
+            st.info(f"解析に使用するサンプル → コントロール: {control_samples} / 処理群: {treatment_samples}")
+
             # t 検定で差分解析
             control_data = df_expr[control_samples].values
             treatment_data = df_expr[treatment_samples].values
