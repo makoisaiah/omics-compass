@@ -61,7 +61,7 @@ if geo_id:
                 geo=geo_id,
                 destdir="/tmp",
                 silent=True,
-                how="brief"
+                include_data=False  # メタデータのみ、発現データは後で取得
             )
         except Exception as e:
             st.error(f"メタデータの取得に失敗しました: {e}")
