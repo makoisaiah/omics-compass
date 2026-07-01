@@ -124,9 +124,7 @@ with tab3:
     st.markdown("### パスウェイ解析")
     st.markdown("有意に変化したプローブを使って関連パスウェイを探索します")
 
-    # プローブ ID を遺伝子シンボルに変換する必要があるが
-    # まずプローブリストで試す
-    gene_list = df_sig["Gene"].tolist()
+    gene_list = [str(g) for g in df_sig["Gene"].tolist() if pd.notna(g)]
 
     db_options = [
         "KEGG_2021_Human",
@@ -196,8 +194,7 @@ with tab4:
     top_genes = df_sig.head(n_genes)
     gene_symbols = top_genes["Gene"].tolist()
     
-    # プローブIDが混入している場合は除外
-    gene_symbols = [g for g in gene_symbols if not g.endswith("_at")]
+    gene_symbols = [str(g) for g in gene_symbols if pd.notna(g) and not str(g).endswith("_at")]
 
     if st.button("ネットワーク解析を実行", type="primary"):
         with st.spinner("STRING DB に問い合わせ中..."):
@@ -359,14 +356,15 @@ with tab5:
                 ]["Gene"].tolist()
 
                 # プローブIDが混入している場合は除外
-                gene_list_up = [g for g in gene_list_up if not g.endswith("_at")]
-                gene_list_down = [g for g in gene_list_down if not g.endswith("_at")]
+                gene_list_up = [str(g) for g in gene_list_up if pd.notna(g) and not str(g).endswith("_at")]
+                gene_list_down = [str(g) for g in gene_list_down if pd.notna(g) and not str(g).endswith("_at")]
 
                 combined_genes = []
                 if use_up:
                     combined_genes += gene_list_up
                 if use_down:
                     combined_genes += gene_list_down
+                combined_genes = [str(g) for g in combined_genes if pd.notna(g)]
 
                 if not combined_genes:
                     st.error("遺伝子リストが空です")
