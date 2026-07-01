@@ -85,8 +85,8 @@ if st.button("LLM でグループを自動判定"):
                 st.markdown("**判定結果（確認して必要なら修正してください）**")
                 st.json(suggestions)
                 st.rerun()
-        else:
-                st.warning("JSON の解析に失敗しました。手動で設定してください。")
+#        else:
+#                st.warning("JSON の解析に失敗しました。手動で設定してください。")
         except Exception as e:
             st.error(f"エラー: {e}")
 
