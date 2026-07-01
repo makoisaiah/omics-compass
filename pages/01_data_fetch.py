@@ -60,8 +60,24 @@ if geo_id:
             )
         except Exception as e:
             st.error(f"メタデータの取得に失敗しました: {e}")
-            st.info("GEO ID が存在するか https://www.ncbi.nlm.nih.gov/geo/ で確認してください")
             st.stop()
+
+    # 補足ファイルを NCBI FTP から直接探す
+    # GEO の FTP 構造: ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSExxx nnn/GSExxxx/suppl/
+    geo_num = geo_id.replace("GSE", "")
+    ftp_base = f"https://ftp.ncbi.nlm.nih.gov/geo/series/GSE{geo_num[:-3]}nnn/{geo_id}/suppl/"
+
+    with st.spinner("補足ファイルを検索中..."):
+        try:
+            response = requests.get(ftp_base, timeout=10)
+            # HTML からファイル名を抽出
+            file_matches = re.findall(
+                rf'href="({geo_id}_[^"]+\.(?:txt|csv|tsv)\.gz)"',
+                response.text
+            )
+            supp_files = [ftp_base + f for f in file_matches]
+        except Exception:
+            supp_files = []
 
     st.success("メタデータ取得成功！")
 
