@@ -139,6 +139,7 @@ if st.button("差分解析を実行", type="primary"):
     with st.spinner("解析中..."):
         try:
             # 発現データを取得
+            # まず GSM テーブルから試みる
             expr_data = {}
             for name in sample_names:
                 gsm = gse.gsms[name]
@@ -147,12 +148,53 @@ if st.button("差分解析を実行", type="primary"):
                     expr_data[name] = table
 
             if not expr_data:
-                st.error("発現データが見つかりませんでした")
-                st.stop()
-
-            # データフレームに変換
-            df_expr = pd.DataFrame(expr_data).dropna()
-            df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
+                # GSM テーブルが空の場合、GSE の補足ファイルから取得を試みる
+                # https://geoparse.readthedocs.io/en/latest/
+                st.info("個別サンプルのテーブルが空のため、補足ファイルから取得を試みます...")
+                
+                supp_files = gse.metadata.get("supplementary_file", [])
+                
+                # SubSeries の補足ファイルも確認
+                if not supp_files:
+                    import GEOparse
+                    for relation in gse.metadata.get("relation", []):
+                        if "SubSeries of" not in relation and "SuperSeries of" not in relation:
+                            continue
+                        # SubSeries の GSE ID を取得
+                    # 直接 FTP から取得
+                    supp_files = [
+                        f"ftp://ftp.ncbi.nlm.nih.gov/geo/series/GSE190nnn/GSE190343/suppl/GSE190343_inhibitor_normalized.txt.gz"
+                    ]
+                
+                ftp_url = None
+                for f in supp_files:
+                    if f.endswith(".txt.gz") or f.endswith(".csv.gz") or f.endswith(".tsv.gz"):
+                        ftp_url = f
+                        break
+                
+                if ftp_url:
+                    import io
+                    import gzip
+                    # FTP URL を HTTPS に変換
+                    https_url = ftp_url.replace(
+                        "ftp://ftp.ncbi.nlm.nih.gov",
+                        "https://ftp.ncbi.nlm.nih.gov"
+                    )
+                    st.info(f"ダウンロード中: {https_url}")
+                    response = requests.get(https_url, timeout=60)
+                    
+                    with gzip.open(io.BytesIO(response.content), 'rt') as f:
+                        df_expr = pd.read_csv(f, sep='\t', index_col=0)
+                    
+                    # カラム名をサンプル ID に合わせる
+                    st.info(f"補足ファイルのカラム: {df_expr.columns.tolist()}")
+                    df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
+                else:
+                    st.error("補足ファイルが見つかりませんでした")
+                    st.stop()
+            else:
+                df_expr = pd.DataFrame(expr_data).dropna()
+                df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
 
             st.success(f"発現データ取得完了: {len(df_expr)} プローブ")
 
