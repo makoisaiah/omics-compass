@@ -202,9 +202,19 @@ if st.button("差分解析を実行", type="primary"):
                 "p_adj": p_adj,
             }).sort_values("p_adj")
 
+            # サンプル数が少ない場合は閾値を緩める
+            n_min = min(len(control_samples), len(treatment_samples))
+            if n_min <= 2:
+                p_threshold = 0.1
+                fc_threshold = 0.5
+                st.info(f"サンプル数が少ないため閾値を緩めています（p_adj < {p_threshold}, |Log2FC| > {fc_threshold}）")
+            else:
+                p_threshold = 0.05
+                fc_threshold = 1.0
+
             df_sig = df_results[
-                (df_results["p_adj"] < 0.05) &
-                (abs(df_results["Log2FoldChange"]) > 1)
+                (df_results["p_adj"] < p_threshold) &
+                (abs(df_results["Log2FoldChange"]) > fc_threshold)
             ].copy()
 
             # プローブ ID → 遺伝子シンボル変換

@@ -422,7 +422,7 @@ with tab5:
                         st.markdown("### 🎯 DKK2 関連の転写因子")
                         st.dataframe(dkk2_related[["Term", "Adjusted P-value", "Genes"]])
                     else:
-                        st.info("DKK2 に直接関連する転写因子は見つかりませんでした")
+                        pass#st.info("DKK2 に直接関連する転写因子は見つかりませんでした")
 
             except Exception as e:
                 st.error(f"エラーが発生しました: {e}")
