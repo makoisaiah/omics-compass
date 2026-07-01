@@ -114,6 +114,30 @@ if geo_id:
     except Exception:
         pass
 
+    # NCBI 自動生成カウント行列を探す（FTP に補足ファイルがない場合の代替）
+    # https://www.ncbi.nlm.nih.gov/geo/info/rnaseqcounts.html
+    if not supp_files:
+        ncbi_genomes = [
+            "GRCh38.p13_NCBI",
+            "GRCh38.p14_NCBI", 
+            "GRCm38.p6_NCBI",
+            "GRCm39_NCBI",
+        ]
+        for genome in ncbi_genomes:
+            ncbi_url = (
+                f"https://www.ncbi.nlm.nih.gov/geo/download/"
+                f"?type=rnaseq_counts&acc={geo_id}&format=file"
+                f"&file={geo_id}_raw_counts_{genome}.tsv.gz"
+            )
+            try:
+                check = requests.head(ncbi_url, timeout=5)
+                if check.status_code == 200:
+                    supp_files = [ncbi_url]
+                    st.info(f"NCBI 自動生成カウント行列を検出: {genome}")
+                    break
+            except Exception:
+                pass
+
     st.markdown("### データ取得")
 
     if supp_files:
@@ -128,6 +152,8 @@ if geo_id:
             with st.spinner("ダウンロード中..."):
                 try:
                     response = requests.get(selected_file, timeout=120)
+                    with gzip.open(io.BytesIO(response.content), 'rt') as f:
+                        df_expr = pd.read_csv(f, sep='\t', index_col=0, low_memory=False, comment='#')
                     with gzip.open(io.BytesIO(response.content), 'rt') as f:
                         df_expr = pd.read_csv(f, sep='\t', index_col=0, low_memory=False)
                     df_expr = df_expr.apply(pd.to_numeric, errors="coerce").dropna()
