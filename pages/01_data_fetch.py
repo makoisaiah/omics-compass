@@ -28,11 +28,24 @@ if geo_id:
         try:
             # GEO からデータを取得
             # ダウンロードしたファイルは /tmp に一時保存（ローカルに残さない）
-            gse = GEOparse.get_GEO(
-                geo=geo_id,
-                destdir="/tmp",
-                silent=True
-            )
+            # GEO ID の形式チェック
+            import re
+            if not re.match(r'^GSE\d+$', geo_id.strip().upper()):
+                st.error("GEO ID の形式が正しくありません。GSE から始まる番号を入力してください（例: GSE21393）")
+                st.stop()
+
+            geo_id = geo_id.strip().upper()
+
+            try:
+                gse = GEOparse.get_GEO(
+                    geo=geo_id,
+                    destdir="/tmp",
+                    silent=True
+                )
+            except Exception as e:
+                st.error(f"データセットの取得に失敗しました: {geo_id}")
+                st.info("GEO ID が存在するか https://www.ncbi.nlm.nih.gov/geo/ で確認してください")
+                st.stop()
 
             st.success(f"取得成功！")
 
