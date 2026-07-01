@@ -40,7 +40,7 @@ def ask_groq(prompt: str, api_key: str) -> str:
             "Content-Type": "application/json"
         },
         json={
-            "model": "mixtral-8x7b-32768",
+            "model": "llama-3.1-8b-instant",
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 500
         },
