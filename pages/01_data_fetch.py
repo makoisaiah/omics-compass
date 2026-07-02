@@ -141,10 +141,15 @@ if geo_id:
     st.markdown("### データ取得")
 
     if supp_files:
-        # RNA-seq: 補足ファイルから取得
-        st.info(f"補足ファイルを検出しました（RNA-seq）")
         for f in supp_files:
-            st.text(f.split("/")[-1])
+            # NCBI の長い URL はファイル名部分だけ表示
+            if "file=" in f:
+                display_name = f.split("file=")[-1]
+            elif "/" in f:
+                display_name = f.split("/")[-1]
+            else:
+                display_name = f
+            st.caption(f"検出ファイル: {display_name}")
 
         selected_file = supp_files[0]
 
