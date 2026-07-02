@@ -99,12 +99,40 @@ st.divider()
 # グループ割り当て UI
 st.markdown("### グループ分け")
 # 処理群の絞り込み機能
-st.markdown("### 処理群の絞り込み（オプション）")
-st.markdown("複数の処理条件がある場合、比較したい条件のキーワードを指定してください")
-treatment_filter = st.text_input(
-    "処理群に含めるキーワード",
-    placeholder="空白の場合は全て処理群として扱います"
-)
+st.markdown("### グループの絞り込み（オプション）")
+col_f1, col_f2 = st.columns(2)
+with col_f1:
+    treatment_filter = st.text_input(
+        "処理群に含めるキーワード",
+        placeholder="例: OBF",
+        help="このキーワードを含むサンプルのみ処理群にします"
+    )
+with col_f2:
+    exclude_filter = st.text_input(
+        "除外するキーワード",
+        placeholder="例: OBM",
+        help="このキーワードを含むサンプルを除外します"
+    )
+
+# フィルターに基づいて group_suggestions を更新
+if treatment_filter or exclude_filter:
+    updated_suggestions = {}
+    for name in sample_names:
+        title = sample_titles.get(name, "")
+        if exclude_filter and exclude_filter.lower() in title.lower():
+            updated_suggestions[name] = "除外"
+        elif treatment_filter and treatment_filter.lower() in title.lower():
+            updated_suggestions[name] = "処理群"
+        else:
+            updated_suggestions[name] = st.session_state.get(
+                f"group_{name}",
+                suggestions.get(name, "コントロール")
+            )
+    # session_state を更新してプルダウンに反映
+    for name, group in updated_suggestions.items():
+        st.session_state[f"group_{name}"] = group
+    suggestions = updated_suggestions
+
 group_assignments = {}
 suggestions = st.session_state.get("group_suggestions", {})
 
@@ -125,7 +153,7 @@ for name in sample_names:
             st.session_state[f"group_{name}"] = suggested
         group = st.selectbox(
             label=name,
-            options=["コントロール", "処理群"],
+            options=["コントロール", "処理群", "除外"],
             key=f"group_{name}",
             label_visibility="collapsed"
         )
@@ -140,6 +168,7 @@ if suggestions:
 if st.button("差分解析を実行", type="primary"):
     control_samples = [n for n, g in group_assignments.items() if g == "コントロール"]
     treatment_samples = [n for n, g in group_assignments.items() if g == "処理群"]
+    # 除外サンプルはスキップ（「除外」は自動的に無視される）
 
     if len(control_samples) < 2 or len(treatment_samples) < 2:
         st.error("各群に最低2サンプル必要です")
