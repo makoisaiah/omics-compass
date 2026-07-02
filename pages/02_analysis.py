@@ -268,7 +268,7 @@ if st.button("差分解析を実行", type="primary"):
             # プローブ ID → 遺伝子シンボル変換
             with st.spinner("プローブ ID を遺伝子シンボルに変換中..."):
                 mg = mygene.MyGeneInfo()
-                probe_ids = df_results["Probe"].tolist()
+                probe_ids = [str(p) for p in df_results["Probe"].tolist()]
 
                 # インデックスが Entrez GeneID（数値）かどうか判定
                 sample_probe = str(probe_ids[0]) if probe_ids else ""
@@ -287,17 +287,8 @@ if st.button("差分解析を実行", type="primary"):
                     scopes = "reporter,symbol"
                     species = "mouse"
 
-                if sample_probe.isdigit():
-                    # NCBI 自動生成カウント行列: Entrez GeneID → シンボル
-                    scopes = "entrezgene"
-                    species = "human"  # GSE166047 はヒトデータ
-                else:
-                    # マイクロアレイのプローブ ID
-                    scopes = "reporter,symbol"
-                    species = "mouse"
-
                 result = mg.querymany(
-                    probe_ids,
+                    [str(p) for p in probe_ids],
                     scopes=scopes,
                     fields="symbol",
                     species=species,
