@@ -98,6 +98,13 @@ st.divider()
 
 # グループ割り当て UI
 st.markdown("### グループ分け")
+# 処理群の絞り込み機能
+st.markdown("### 処理群の絞り込み（オプション）")
+st.markdown("複数の処理条件がある場合、比較したい条件のキーワードを指定してください")
+treatment_filter = st.text_input(
+    "処理群に含めるキーワード",
+    placeholder="空白の場合は全て処理群として扱います"
+)
 group_assignments = {}
 suggestions = st.session_state.get("group_suggestions", {})
 
@@ -168,8 +175,20 @@ if st.button("差分解析を実行", type="primary"):
 
             # 利用可能なサンプルに絞り込む
             available_samples = df_expr.columns.tolist()
-            control_samples = [s for s in control_samples if s in available_samples]
-            treatment_samples = [s for s in treatment_samples if s in available_samples]
+            control_samples = [n for n, g in group_assignments.items() if g == "コントロール"]
+            treatment_samples = [n for n, g in group_assignments.items() if g == "処理群"]
+
+            # 処理群の絞り込み
+            if treatment_filter:
+                filtered = [
+                    s for s in treatment_samples
+                    if treatment_filter.lower() in sample_titles.get(s, "").lower()
+                ]
+                if filtered:
+                    st.info(f"キーワード '{treatment_filter}' で絞り込み: {len(filtered)} サンプル")
+                    treatment_samples = filtered
+                else:
+                    st.warning(f"キーワード '{treatment_filter}' に一致するサンプルがありません")
 
             if not control_samples or not treatment_samples:
                 st.error(f"有効なサンプルが不足しています。利用可能: {available_samples}")
@@ -222,11 +241,22 @@ if st.button("差分解析を実行", type="primary"):
                 mg = mygene.MyGeneInfo()
                 probe_ids = df_results["Probe"].tolist()
 
+                # インデックスが数値（Entrez GeneID）かシンボルかを判定
+                sample_probe = str(probe_ids[0]) if probe_ids else ""
+                if sample_probe.isdigit():
+                    # NCBI 自動生成カウント行列: Entrez GeneID → シンボル
+                    scopes = "entrezgene"
+                    species = "human"  # GSE166047 はヒトデータ
+                else:
+                    # マイクロアレイのプローブ ID
+                    scopes = "reporter,symbol"
+                    species = "mouse"
+
                 result = mg.querymany(
                     probe_ids,
-                    scopes="reporter,symbol",
+                    scopes=scopes,
                     fields="symbol",
-                    species="mouse",
+                    species=species,
                     returnall=True
                 )
 
