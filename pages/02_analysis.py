@@ -114,6 +114,9 @@ with col_f2:
         help="このキーワードを含むサンプルを除外します"
     )
 
+group_assignments = {}
+suggestions = st.session_state.get("group_suggestions", {})
+
 # フィルターに基づいて group_suggestions を更新
 if treatment_filter or exclude_filter:
     updated_suggestions = {}
@@ -132,9 +135,6 @@ if treatment_filter or exclude_filter:
     for name, group in updated_suggestions.items():
         st.session_state[f"group_{name}"] = group
     suggestions = updated_suggestions
-
-group_assignments = {}
-suggestions = st.session_state.get("group_suggestions", {})
 
 cols = st.columns(2)
 with cols[0]:
