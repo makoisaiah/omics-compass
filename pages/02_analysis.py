@@ -300,14 +300,20 @@ if st.button("差分解析を実行", type="primary"):
                     if "symbol" in hit:
                         probe_to_symbol[hit["query"]] = hit["symbol"]
 
+                # Probe カラムを str に変換してからマッピング
+                df_results["Probe"] = df_results["Probe"].astype(str)
+                df_sig["Probe"] = df_sig["Probe"].astype(str)
+
                 df_results["Gene"] = df_results["Probe"].map(
                     probe_to_symbol
                 ).fillna(df_results["Probe"])
+
                 df_sig["Gene"] = df_sig["Probe"].map(
                     probe_to_symbol
                 ).fillna(df_sig["Probe"])
 
                 mapped = df_results["Gene"].ne(df_results["Probe"]).sum()
+
                 st.info(f"{mapped} / {len(df_results)} プローブを遺伝子シンボルに変換しました")
 
             # 結果表示
