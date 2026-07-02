@@ -270,8 +270,23 @@ if st.button("差分解析を実行", type="primary"):
                 mg = mygene.MyGeneInfo()
                 probe_ids = df_results["Probe"].tolist()
 
-                # インデックスが数値（Entrez GeneID）かシンボルかを判定
+                # インデックスが Entrez GeneID（数値）かどうか判定
                 sample_probe = str(probe_ids[0]) if probe_ids else ""
+                try:
+                    int(sample_probe)
+                    is_entrez = True
+                except ValueError:
+                    is_entrez = False
+
+                st.info(f"プローブ形式: {'Entrez GeneID' if is_entrez else 'プローブ ID / シンボル'}")
+
+                if is_entrez:
+                    scopes = "entrezgene"
+                    species = "human"
+                else:
+                    scopes = "reporter,symbol"
+                    species = "mouse"
+
                 if sample_probe.isdigit():
                     # NCBI 自動生成カウント行列: Entrez GeneID → シンボル
                     scopes = "entrezgene"
