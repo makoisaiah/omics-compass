@@ -1,8 +1,8 @@
-# 🧭 OmicsCompass
+# OmicsCompass
 
 オミクスデータから経路を探索する研究支援ツール。RNA-seq などの公開データを取得し、差分解析・パスウェイ解析・ネットワーク解析・上流因子推定を行うことができます。
 
-## 🌐 アクセス URL
+## アクセス URL
 
 https://omics-compass-emrvfcsqsf8wgztwhdgjyd.streamlit.app
 
@@ -10,17 +10,17 @@ https://omics-compass-emrvfcsqsf8wgztwhdgjyd.streamlit.app
 
 ---
 
-## ✨ 機能一覧
+## 機能一覧
 
 | ページ | 機能 |
 |--------|------|
-| 📥 Data Fetch | NCBI GEO から RNA-seq・マイクロアレイデータを取得 |
-| 🔬 Analysis | 差分発現解析（t検定 + Benjamini-Hochberg 補正）、プローブ→遺伝子シンボル変換、LLM によるグループ自動判定 |
-| 📊 Visualization | Volcano Plot、Heatmap、パスウェイ解析、遺伝子ネットワーク解析（STRING DB）、上流転写因子推定 |
+| Data Fetch | NCBI GEO から RNA-seq・マイクロアレイデータを取得 |
+| Analysis | 差分発現解析（t検定 + Benjamini-Hochberg 補正）、プローブ→遺伝子シンボル変換、LLM によるグループ自動判定 |
+| Visualization | Volcano Plot、Heatmap、パスウェイ解析、遺伝子ネットワーク解析（STRING DB）、上流転写因子推定 |
 
 ---
 
-## 🚀 ローカルでの起動方法
+## ローカルでの起動方法
 
 ### 必要なもの
 
@@ -109,7 +109,7 @@ print(stauth.Hasher.hash_passwords(credentials))
 
 ---
 
-## 🤖 LLM によるグループ自動判定
+## LLM によるグループ自動判定
 
 ローカルに Ollama が起動していれば自動的にローカル Mistral を使用します。なければ Groq API にフォールバックします。
 
@@ -126,7 +126,7 @@ ollama run mistral "Hello"
 
 ---
 
-## 📦 使用パッケージ
+## 使用パッケージ
 
 | パッケージ | 用途 |
 |-----------|------|
@@ -143,7 +143,7 @@ ollama run mistral "Hello"
 
 ---
 
-## 📁 ディレクトリ構成
+## ディレクトリ構成
 
 ```
 omics-compass/
@@ -163,7 +163,7 @@ omics-compass/
 
 ---
 
-## 🗺️ 今後の実装予定
+## 今後の実装予定
 
 - [ ] データ型自動判定（マイクロアレイ vs RNA-seq）
 - [ ] 複数データセットのメタ解析
@@ -184,6 +184,6 @@ omics-compass/
 
 ---
 
-## 👤 開発者
+## 開発者
 
 makoisaiah
